@@ -1,0 +1,67 @@
+# api_client.py
+
+import time
+import requests
+import logging
+
+# === MaxStudio API config ===
+API_KEY      = '19034319-1689-43df-b1d7-ef56efe394bb'
+BABY_GEN_URL = 'https://api.maxstudio.ai/baby-generator'
+POST_HEADERS = {
+    'x-api-key': API_KEY,
+    'Content-Type': 'application/json'
+}
+GET_HEADERS = {
+    'x-api-key': API_KEY
+}
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
+
+def _poll_job(job_id: str) -> dict:
+    """
+    Poll trạng thái job MaxStudio liên tục đến khi completed, không có giới hạn retries.
+    """
+    url = f"{BABY_GEN_URL}/{job_id}"
+    logging.debug(f"Start polling job: {url}")
+    
+    while True:
+        try:
+            r = requests.get(url, headers=GET_HEADERS)
+            logging.debug(f"Poll {url} → {r.status_code}")
+            if r.status_code == 200:
+                data = r.json()
+                status = data.get('status')
+                logging.debug(f"Job {job_id} status: {status}")
+                if status == 'completed':
+                    return data
+                if status in ('failed', 'not-found'):
+                    raise RuntimeError(f"Job {job_id} failed: {status}")
+            else:
+                logging.warning(f"Unexpected {r.status_code} response. Retrying...")
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error during poll {url}: {e}")
+
+        # No delay, just keep polling
+
+def generate_baby_url(father_url: str, mother_url: str, gender: str) -> bytes:
+    payload = {
+        'fatherImage': father_url,
+        'motherImage': mother_url,
+        'gender': gender
+    }
+    logging.debug(f"POST {BABY_GEN_URL} payload={payload}")
+    r = requests.post(BABY_GEN_URL, headers=POST_HEADERS, json=payload)
+    logging.debug(f"Response: {r.status_code} {r.text}")
+    r.raise_for_status()
+
+    job_id = r.json().get('jobId')
+    logging.debug(f"Job ID: {job_id}")
+
+    result = _poll_job(job_id)
+    baby_url = result['result'][0]
+    logging.debug(f"Baby image URL: {baby_url}")
+
+    img_resp = requests.get(baby_url)
+    logging.debug(f"Downloaded baby image: {img_resp.status_code}, {len(img_resp.content)} bytes")
+    img_resp.raise_for_status()
+    return img_resp.content
