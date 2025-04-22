@@ -1,3 +1,4 @@
+import os
 import io
 import threading
 import logging
@@ -8,7 +9,7 @@ from tkinter import (
     Tk, Frame, Label, Button, Radiobutton,
     StringVar, filedialog, messagebox, OptionMenu, Text, END
 )
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageOps
 from api_client import save_image_to_folder, upload_image_to_git, get_image_link_from_git, generate_baby_url  # Import function from api_client
 
 # Logging configuration
@@ -68,48 +69,50 @@ def create_gui():
         if not path: return
         var.set(path)
         img = Image.open(path)
-        img = img.resize((preview.winfo_width(), preview.winfo_height()), Image.LANCZOS)
+
+        # Resize ảnh để vừa với khung vuông tỉ lệ 1:1
+        img = ImageOps.fit(img, (preview.winfo_width(), preview.winfo_width()), method=0, bleed=0.0, centering=(0.5, 0.5))
+
+        # Convert ảnh thành PhotoImage để hiển thị trên preview
         ph = ImageTk.PhotoImage(img)
-        preview.config(image=ph, text='')
-        preview.image = ph
+        preview.config(image=ph, text='')  # Đặt ảnh cho preview
+        preview.image = ph  # Lưu ảnh vào preview để tránh mất ảnh khi giao diện thay đổi
 
     def generate():
         try:
-            # Show "Generating..." status
+            # Hiển thị trạng thái "Generating..."
             result_box.delete('1.0', END)
             result_box.insert(END, "Generating... Please wait...")
 
             if not father_path.get() or not mother_path.get():
                 return messagebox.showerror('Error', 'Please select both parent images.')
 
-            # Get gender-specific image and name
+            # Lấy giá trị giới tính từ giao diện
             gender_choice = gender.get()
             logging.debug(f"Selected Gender: {gender_choice}")
 
-            # Save images with timestamped filenames
-            father_image_name = f"father_image.jpg"
-            mother_image_name = f"mother_image.jpg"
-            father_image_path_saved = save_image_to_folder(father_path.get(), father_image_name)
-            mother_image_path_saved = save_image_to_folder(mother_path.get(), mother_image_name)
+            # Lấy tên ảnh và lưu vào thư mục 'images'
+            father_image_path_saved = save_image_to_folder(father_path.get(), True)
+            mother_image_path_saved = save_image_to_folder(mother_path.get(), False)
 
-            # Upload images to GitHub
+            # Đẩy ảnh lên GitHub
             upload_image_to_git(father_image_path_saved)
             upload_image_to_git(mother_image_path_saved)
 
-            # Get the image URLs from GitHub
-            father_img_url = get_image_link_from_git(father_image_name)
-            mother_img_url = get_image_link_from_git(mother_image_name)
+            # Lấy link ảnh từ GitHub
+            father_img_url = get_image_link_from_git(os.path.basename(father_image_path_saved))
+            mother_img_url = get_image_link_from_git(os.path.basename(mother_image_path_saved))
 
-            # Generate baby image using father and mother image links, and gender
+            # Gọi API Baby Generator để tạo ảnh em bé
             baby_bytes = generate_baby_url(father_img_url, mother_img_url, gender_choice)
 
-            # Convert baby image to ImageTk.PhotoImage and display it
+            # Chuyển ảnh em bé thành ImageTk.PhotoImage và hiển thị
             img = Image.open(io.BytesIO(baby_bytes)).resize((400, 400), Image.LANCZOS)
             photo = ImageTk.PhotoImage(img)
             image_label.config(image=photo)
             image_label.image = photo
 
-            # Show "Generation complete" status
+            # Hiển thị dòng trạng thái "Generation complete"
             result_box.delete('1.0', END)
             result_box.insert(END, "Generation complete!")
 

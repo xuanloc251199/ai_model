@@ -77,7 +77,7 @@ def get_image_link_from_git(image_name: str) -> str:
     """
     Lấy link ảnh từ GitHub.
     """
-    return f"https://github.com/xuanloc251199/ai-model/raw/main/{IMAGES_DIR}/{image_name}"
+    return f"https://github.com/xuanloc251199/ai_model/raw/main/{IMAGES_DIR}/{image_name}"
 
 def _poll_job(job_id: str, url: str) -> dict:
     """
